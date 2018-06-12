@@ -43,6 +43,8 @@ int VU_SYSNAME(name, open) (const char *pathname, int flags, mode_t mode, void *
 int VU_SYSNAME(name, close) (int fd, void *fdprivate); \
 ssize_t VU_SYSNAME(name, read) (int fd, void *buf, size_t count, void *fdprivate); \
 ssize_t VU_SYSNAME(name, write)(int fd, const void *buf, size_t count, void *fdprivate); \
+ssize_t VU_SYSNAME(name, pread64) (int fd, void *buf, size_t count, off_t offset, int flags, void *fdprivate); \
+ssize_t VU_SYSNAME(name, pwrite64) (int fd, const void *buf, size_t count, off_t offset, int flags, void *fdprivate); \
 int VU_SYSNAME(name, getdents64) (unsigned int fd, struct dirent64 *dirp, unsigned int count, void *fdprivate); \
 off_t VU_SYSNAME(name, lseek) (int fd, off_t offset, int whence, void *fdprivate); \
 int VU_SYSNAME(name, ioctl) (int fd, unsigned long request, void *buf, uintptr_t addr, void *fdprivate); \
@@ -95,7 +97,6 @@ int VU_SYSNAME(name, setsockopt) (int sockfd, int level, int optname, \
 \
 void VU_SYSNAME(name, cleanup) (uint8_t type, void *arg, int arglen, \
     struct vuht_entry_t *ht); \
-
 
 #define CHECKMODULE 0        // Module name
 #define CHECKPATH 1          // Path

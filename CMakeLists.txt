@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
-set(CMAKE_C_FLAGS 
+set(CMAKE_C_FLAGS
 		"-ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter")
 add_definitions(-D_GNU_SOURCE)
 
@@ -13,7 +13,7 @@ set(HEADERS_INSTALL_PATH ${CMAKE_INSTALL_PREFIX}/include)
 set(VU_HEADERS ${PROJECT_SOURCE_DIR}/include)
 set(VU_DYN_SOURCE_PATH ${CMAKE_BINARY_DIR}/umvu_dynsrc)
 set(VU_DYN_HEADER_PATH ${CMAKE_BINARY_DIR}/include)
- 
+
 set(VU_SYSCALL_DEFS ${VU_DYN_HEADER_PATH}/syscall_defs.h)
 set(R_TABLE_H ${VU_DYN_HEADER_PATH}/r_table.h)
 set(VU_ARCHTABLE ${VU_DYN_SOURCE_PATH}/arch_table.c)
@@ -37,6 +37,7 @@ add_subdirectory(test_modules)
 add_subdirectory(libvumod)
 add_subdirectory(vufuse)
 add_subdirectory(vudev)
+add_subdirectory(vudev_modules)
 add_subdirectory(include)
 add_subdirectory(vunet)
 add_subdirectory(vufs)

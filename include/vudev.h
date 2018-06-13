@@ -45,8 +45,8 @@ struct vudev_operations_t {
   int (*fini) (void *private_data);
 };
 
-#define printd(fmt, ...) printkdebug(D, "%s " fmt, __func__, ##__VA_ARGS__)
-#define printderror(str) if(errno) printd("error [%s]:[%s]", str, strerror(errno))
+#define vudev_printd(fmt, ...) printkdebug(D, "%s " fmt, __func__, ##__VA_ARGS__)
+#define vudev_perror(str) if(errno) vudev_printd("error [%s]:[%s]", str, strerror(errno))
 
 void *vudev_get_fdprivate(void);
 void *vudev_get_private_data(void);
@@ -66,5 +66,14 @@ static inline char *parse_mount_option(char *s, char **key, char **val) {
   *(s++) = 0;
   return s;
 }
+
+#define VUDEV_GET_IOCTL_PARM(request, parm) switch(request) { \
+    case BLKROSET: parm = _IOR(' ', 0, int); break;  \
+    case BLKROGET:  \
+    case BLKSSZGET: \
+    case BLKGETSIZE: parm = _IOW(' ', 0, int); break;  \
+    case BLKGETSIZE64: parm = _IOW(' ', 0, long long); break;  \
+    case HDIO_GETGEO: parm = _IOW(' ', 0, struct hd_geometry); break;  \
+    default: parm = 0; break; }
 
 #endif

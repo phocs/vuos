@@ -18,11 +18,17 @@
  *
  */
 
+
+
 #include <errno.h>
+#include <dlfcn.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <asm/ioctl.h>
 
@@ -53,14 +59,14 @@ static int (*vboxdd_get_LCHS_geometry) ();
 
 struct vuvdi_t {
 	int fd;
-  off_t size;
-  void *disk;
+	void *disk;
+  size_t size;
   unsigned long flags;
-}
+};
 
 struct vuvdifd_t {
   off_t offset;
-}
+};
 
 struct vuvdi_pdmmediageom_t {
 	uint32_t cHeads;
@@ -79,41 +85,44 @@ static int vboxdd_detect_type(int fd, char **disktype) {
 	else if (strncmp (buf, "KDMV", 4) == 0) *disktype = "VMDK";
 	else if (strncmp (buf, "<<<",  3) == 0) *disktype = "VDI";
 	else {
-		printderror("cannot autodetect disk type");
+		vudev_perror("cannot autodetect disk type");
 		errno = ENODEV; return -1;
 	}
-	printd("disktype [%s]\n", *disktype);
+	vudev_printd("disktype [%s]\n", *disktype);
 	return 0;
 }
 
 static int dlload_VBoxDD() {
-	if(VBoxDD_count)
-		return ++VBoxDD_count;
-	if((VBoxDD_hdl = vu_mod_dlopen("/usr/lib/virtualbox/VBoxDD.so", RTLD_LAZY)) == NULL) {
-		printderror("VBoxDD library: not found");
+	if(vboxdd_count)
+		return ++vboxdd_count;
+	if((vboxdd_hdl = vu_mod_dlopen("/usr/lib/virtualbox/VBoxDD.so", RTLD_NOW)) == NULL) {
+		vudev_perror("VBoxDD library: not found");
 		return -1;
 	}
-	vboxdd_create = dlsym(VBoxDD_hdl, "VDCreate");
-	vboxdd_open = dlsym(VBoxDD_hdl, "VDOpen");
-	vboxdd_close = dlsym(VBoxDD_hdl, "VDClose");
-	vboxdd_read = dlsym(VBoxDD_hdl, "VDRead");
-	vboxdd_write = dlsym(VBoxDD_hdl, "VDWrite");
-	vboxdd_flush = dlsym(VBoxDD_hdl, "VDFlush");
-	vboxdd_get_size = dlsym(VBoxDD_hdl, "VDGetSize");
-	vboxdd_get_LCHS_geometry = dlsym(VBoxDD_hdl, "VDGetLCHSGeometry");
-	printd("%p %p %p %p %p %p %p %p\n",
+	vboxdd_create = (int *) dlsym(vboxdd_hdl, "VDCreate");
+	vboxdd_open = (int *) dlsym(vboxdd_hdl, "VDOpen");
+	vboxdd_close = (int *) dlsym(vboxdd_hdl, "VDClose");
+	vboxdd_read = (int *) dlsym(vboxdd_hdl, "VDRead");
+	vboxdd_write = (int *) dlsym(vboxdd_hdl, "VDWrite");
+	vboxdd_flush = (int *) dlsym(vboxdd_hdl, "VDFlush");
+	vboxdd_get_size = (uint64_t *) dlsym(vboxdd_hdl, "VDGetSize");
+	vboxdd_get_LCHS_geometry = (int *) dlsym(vboxdd_hdl, "VDGetLCHSGeometry");
+	vudev_printd("%p %p %p %p %p %p %p %p\n",
 		vboxdd_create, vboxdd_open, vboxdd_close, vboxdd_read,
 		vboxdd_write, vboxdd_flush, vboxdd_get_size, vboxdd_get_LCHS_geometry);
-	return ++VBoxDD_count;
+	return ++vboxdd_count;
 }
 
 static void dlunload_VBoxDD() {
 	vboxdd_count--;
 	if (vboxdd_count == 0) {
-		dlclose(VBoxDD_hdl);
-		VBoxDD_hdl=NULL;
+		dlclose(vboxdd_hdl);
+		vboxdd_hdl=NULL;
 	}
 }
+
+
+
 
 /******************************************************************************/
 /***********************************SYSCALL************************************/
@@ -128,19 +137,50 @@ int vuvdi_open(const char *pathname, int flags, mode_t mode) {
 }
 
 int vuvhd_close(int fd) {
-  struct vuvdifd_t *vdifd = vudev_get_fdprivate();
-  free(vdifd);
+  free(vudev_get_fdprivate());
   return 0;
 }
 
-/*
-long vuvdi_ioctl_parms(unsigned long request) {
-  switch (request) {
-    case HDIO_GETGEO: return _IOW('D', 0, struct hd_geometry);
-    default: return 0;
+static inline ssize_t _vuvdi_pread64(struct vuvdi_t *vdi, void *buf, size_t count, off_t offset) {
+	if(count == 0) return 0;
+	else if((offset & STD_SECTORSIZE_OFFSET_MASK) == 0 &&
+					(count & STD_SECTORSIZE_OFFSET_MASK) == 0) {
+		vudev_printd("read [(offset & STD_SECTORSIZE_OFFSET_MASK) == 0 && (count & STD_SECTORSIZE_OFFSET_MASK) == 0]");
+		return vboxdd_read(vdi->disk, offset, buf, count);
+	} else {
+		vudev_printd("read [(offset & STD_SECTORSIZE_OFFSET_MASK) == [%d] && (count & STD_SECTORSIZE_OFFSET_MASK) == [%d]]", (offset & STD_SECTORSIZE_OFFSET_MASK), (count & STD_SECTORSIZE_OFFSET_MASK));
+		int ret_value;
+		char tmp_buf[STD_SECTORSIZE];
+		size_t tmp_offset, tmp_count, tmp_lconut;
+		tmp_offset = pos & STD_SECTORSIZE_OFFSET_MASK;
+		if(tmp_offset) {
+			ret_value = vboxdd_read(vdi->disk, offset - tmp_offset, tmp_buf, STD_SECTORSIZE);
+			if(ret_value > 0) {
+				tmp_count = STD_SECTORSIZE -
+			}
+		}
 	}
+	return 0;
 }
-*/
+
+ssize_t vuvdi_read(int fd, void *buf, size_t count) {
+	int ret_value = 0;
+	struct vuvdi_t *vdi = vudev_get_private_data();
+	struct vuvdifd_t *vdifd = vudev_get_fdprivate();
+	if((ret_value = _vuvdi_pread64(vdi, buf, count, vdifd->offset) != -1)
+		vdifd->offset += ret_value;
+	return ret_value;
+}
+
+
+
+
+
+long vuvdi_ioctl_parms(unsigned long request) {
+  unsigned long parameter;
+	VUDEV_GET_IOCTL_PARM(request, parameter);
+	return parameter;
+}
 
 static int vuvdi_init(const char *source, unsigned long flags, const char *args, struct vudev_t *vudev) {
 	struct vuvdi_t *vdi;
@@ -153,14 +193,14 @@ static int vuvdi_init(const char *source, unsigned long flags, const char *args,
 		goto exit_err;
 	vdi->flags = flags;
 	if(vboxdd_create(NULL, &vdi->disk) < 0) {
-		printderror("invalid initialisation of VD interface");
+		vudev_perror("invalid initialisation of VD interface");
 		goto exit_err;
 	}
 	if(vboxdd_detect_type(vdi->fd, &disk_type) < 0)
-		goto err_exit;
+		goto exit_err;
 	if(vboxdd_open(vdi->disk, disk_type, source,
 			(flags&MS_RDONLY)? VD_OPEN_FLAGS_READONLY:VD_OPEN_FLAGS_NORMAL, NULL) < 0) {
-		printderror("opening vbox image failed");
+		vudev_perror("opening vbox image failed");
 		goto exit_err;
 	}
 	vdi->size = vboxdd_get_size(vdi->disk, 0);

@@ -78,12 +78,12 @@ dev_t vudev_get_devno(void) {
     return 0;
 }
 
-static inline unsigned int _get_minorno(struct vudev_t *vudev, const char *pathname) {
+static inline int _get_minorno(struct vudev_t *vudev, const char *pathname) {
   if(atoi(pathname) > 0)
     return atoi(pathname);
   else if(strcmp(pathname, "/") == 0 || strcmp(pathname, vudev->target) == 0)
     return 0;
-  else if(strncmp(pathname, vudev->target, vudev->targetlen) == 0 && strlen(pathname) > vudev->targetlen)
+  else if(strncmp(pathname, vudev->target, vudev->targetlen) == 0)
     return atoi(pathname + vudev->targetlen);
   else
     return -1;
@@ -93,19 +93,20 @@ static int vudev_confirm(uint8_t type, void *arg, int arglen, struct vuht_entry_
   struct vudev_t *vudev = vuht_get_private_data(ht);
   switch (type) {
     case CHECKPATH: {
-      //printd("CHECKPATH [%s]", (char *) arg);
-      unsigned int minorno = _get_minorno(vudev, arg);
-      return (minorno != -1 && minorno <= vudev->nsubdev);
+      //vudev_printd("CHECKPATH [%s]", (char *) arg);
+      int minorno = _get_minorno(vudev, arg);
+      return (minorno != -1 && minorno <= (int) vudev->nsubdev);
     }
     case CHECKCHRDEVICE:
     case CHECKBLKDEVICE: {
-      //printd("CHECKCHRDEVICE|CHECKBLKDEVICE ret [%d]",(major(*dev) == major(vudev->stat.st_rdev) && minor(*dev) <= minor(vudev->stat.st_rdev) + vudev->nsubdev));
       dev_t *dev = arg;
+      //vudev_printd("CHECKCHRDEVICE|CHECKBLKDEVICE ret [%d]",(major(*dev) == major(vudev->stat.st_rdev) && minor(*dev) <= minor(vudev->stat.st_rdev) + vudev->nsubdev));
       return (major(*dev) == major(vudev->stat.st_rdev) && minor(*dev) <= minor(vudev->stat.st_rdev) + vudev->nsubdev);
     }
     case CHECKIOCTL: {
-      //printd("CHECKIOCTL request [%d] ret [%d]", *request, (vudev->devops->supported_ioctl(*request) > 0));
       unsigned long *request = arg;
+      if(*request == BLKSSZGET)
+        vudev_printd("CHECKIOCTL request [%d] ret [%d]", *request, (vudev->devops->ioctl_parms(*request) != 0));
       return (vudev->devops->ioctl_parms(*request) != 0);
     }
   }
@@ -157,12 +158,12 @@ static void set_mount_options(const char *args, struct vudev_t *vudev) {
 /***********************************SYSCALL************************************/
 
 int vu_vudev_open(const char *pathname, int flags, mode_t mode, void **fdprivate) {
-  printd("[%s] flags [%d] mode [%o]", pathname, flags, mode);
+  vudev_printd("[%s] flags [%d] mode [%o]", pathname, flags, mode);
   /* access control? */
   int ret_value = 0;
   struct vudev_t *vudev = vu_get_ht_private_data();
   if((cur_vudevfd = calloc(1, sizeof(struct vudevfd_t))) == NULL){
-    printderror("cur_vudevfd = calloc"); return -1;
+    vudev_perror("cur_vudevfd = calloc"); return -1;
   }
   cur_vudevfd->devno = makedev(major(vudev->stat.st_rdev), _get_minorno(vudev, pathname));
   cur_vudevfd->open_flags = flags & ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
@@ -170,7 +171,7 @@ int vu_vudev_open(const char *pathname, int flags, mode_t mode, void **fdprivate
   if(vudev->devops->open)
     ret_value = vudev->devops->open(pathname, flags, mode);
   if(ret_value < 0) {
-    printderror("ret_value < 0");
+    vudev_perror("ret_value < 0");
     free(cur_vudevfd); cur_vudevfd = NULL;
   }
   *fdprivate = cur_vudevfd; /* NULL if an error has occurred */
@@ -178,7 +179,7 @@ int vu_vudev_open(const char *pathname, int flags, mode_t mode, void **fdprivate
 }
 
 int vu_vudev_close(int fd, void *fdprivate) {
-  printd("fd [%d] fdprivate [0x%X]", fd, fdprivate);
+  vudev_printd("fd [%d] fdprivate [%p]", fd, fdprivate);
   int ret_value = 0;
   cur_vudevfd = fdprivate;
   if (cur_vudevfd->vudev->devops->close)
@@ -191,7 +192,7 @@ int vu_vudev_close(int fd, void *fdprivate) {
 }
 
 ssize_t vu_vudev_read(int fd, void *buf, size_t count, void *fdprivate) {
-  printd("fd [%d] buf [0x%X] count [%d]", fd, buf, count);
+  vudev_printd("fd [%d] buf [%p] count [%d]", fd, buf, count);
   int ret_value = 0;
   cur_vudevfd = fdprivate;
   if((cur_vudevfd->open_flags&O_WRONLY) != 0) {
@@ -199,11 +200,12 @@ ssize_t vu_vudev_read(int fd, void *buf, size_t count, void *fdprivate) {
   }
   if(cur_vudevfd->vudev->devops->read)
     ret_value = cur_vudevfd->vudev->devops->read(fd, buf, count);
+  vudev_printd("read: [%lu]", ret_value);
   return ret_value;
 }
 
 ssize_t vu_vudev_write(int fd, const void *buf, size_t count, void *fdprivate) {
-  printd("fd [%d] buf [0x%X] count [%d]", fd, buf, count);
+  vudev_printd("fd [%d] buf [%p] count [%d]", fd, buf, count);
   int ret_value = 0;
   cur_vudevfd = fdprivate;
   if((cur_vudevfd->open_flags&O_RDONLY) != 0) {
@@ -211,11 +213,12 @@ ssize_t vu_vudev_write(int fd, const void *buf, size_t count, void *fdprivate) {
   }
   if(cur_vudevfd->vudev->devops->write)
     ret_value = cur_vudevfd->vudev->devops->write(fd, buf, count);
+  vudev_printd("wrote: [%lu]", ret_value);
   return ret_value;
 }
 
 ssize_t vu_vudev_pread64(int fd, void *buf, size_t count, off_t offset, int flags, void *fdprivate) {
-  printd("fd [%d] buf [0x%X] count [%d] offset [%d] flags [%d]", fd, buf, count, offset, flags);
+  vudev_printd("fd [%d] buf [%p] count [%d] offset [%d] flags [%d]", fd, buf, count, offset, flags);
   int ret_value = 0;
   cur_vudevfd = fdprivate;
   if((cur_vudevfd->open_flags&O_RDONLY) != 0) {
@@ -223,11 +226,12 @@ ssize_t vu_vudev_pread64(int fd, void *buf, size_t count, off_t offset, int flag
   }
   if(cur_vudevfd->vudev->devops->pwrite64)
     ret_value = cur_vudevfd->vudev->devops->pread64(fd, buf, count, offset);
+  vudev_printd("read: [%lu]", count);
   return ret_value;
 }
 
 ssize_t vu_vudev_pwrite64(int fd, const void *buf, size_t count, off_t offset, int flags, void *fdprivate) {
-  printkdebug(D, "vudev_pwrite64: fd [%d] buf [0x%X] count [%d] offset [%d] flags [%d]", fd, buf, count, offset, flags);
+  printkdebug(D, "vudev_pwrite64: fd [%d] buf [%p] count [%d] offset [%d] flags [%d]", fd, buf, count, offset, flags);
   int ret_value = 0;
   cur_vudevfd = fdprivate;
   if((cur_vudevfd->open_flags&O_WRONLY) != 0) {
@@ -235,11 +239,17 @@ ssize_t vu_vudev_pwrite64(int fd, const void *buf, size_t count, off_t offset, i
   }
   if(cur_vudevfd->vudev->devops->read)
     ret_value = cur_vudevfd->vudev->devops->pwrite64(fd, buf, count, offset);
+  vudev_printd("wrote: [%lu]", ret_value);
   return ret_value;
 }
 
+int vu_vudev_access(char *path, int mode, int flags) {
+  vudev_printd("path [%s] mode [%d] flags [%d]", path, mode, flags);
+  return 0;
+}
+
 off_t vu_vudev_lseek(int fd, off_t offset, int whence, void *fdprivate) {
-  printd("fd [%d] offset [%d] whence [%d]", fd, offset, whence);
+  vudev_printd("fd [%d] offset [%lu] whence [%d]", fd, offset, whence);
   cur_vudevfd = fdprivate;
   if(cur_vudevfd->vudev->devops->lseek == NULL) {
     errno = ENOSYS; return -1;
@@ -248,7 +258,7 @@ off_t vu_vudev_lseek(int fd, off_t offset, int whence, void *fdprivate) {
 }
 
 int vu_vudev_lstat(char *pathname, struct vu_stat *buf, int flags, int sfd, void *fdprivate) {
-  printd("path [%s] buf [0x%X] flags [%d] sfd [%d] fdprivate [0x%X]", pathname, buf, flags, sfd, fdprivate);
+  vudev_printd("path [%s] buf [%p] flags [%d] sfd [%d] fdprivate [%p]", pathname, buf, flags, sfd, fdprivate);
   cur_vudevfd = fdprivate;
   struct vudev_t *vudev = vu_get_ht_private_data();
   memcpy(buf, &vudev->stat, sizeof(struct vu_stat));
@@ -257,7 +267,7 @@ int vu_vudev_lstat(char *pathname, struct vu_stat *buf, int flags, int sfd, void
 }
 
 int vu_vudev_lchown(const char *pathname, uid_t owner, gid_t group, int fd, void *fdprivate) {
-  printd("path [%s] owner [%d] group [%d] fd [%d]", pathname, owner, group, fd);
+  vudev_printd("path [%s] owner [%d] group [%d] fd [%d]", pathname, owner, group, fd);
   struct vudev_t *vudev = vu_get_ht_private_data();
   /* access control */
   if(getuid() != 0 && getuid() != vudev->stat.st_uid) {
@@ -273,7 +283,7 @@ int vu_vudev_lchown(const char *pathname, uid_t owner, gid_t group, int fd, void
 }
 
 int vu_vudev_chmod(const char *pathname, mode_t mode, int fd, void *fdprivate) {
-  printd("path [%s] mode [%o] fd [%d]", pathname, mode, fd);
+  vudev_printd("path [%s] mode [%o] fd [%d]", pathname, mode, fd);
   struct vudev_t *vudev = vu_get_ht_private_data();
   /* access control */
   if(getuid() != 0 && getuid() != vudev->stat.st_uid) {
@@ -287,11 +297,11 @@ int vu_vudev_chmod(const char *pathname, mode_t mode, int fd, void *fdprivate) {
 
 int vu_vudev_mount(const char *source, const char *target,
   const char *filesystemtype, unsigned long mountflags, const void *data) {
-  printd("source [%s] target [%s] filesystemtype [%s] mountflags [%u]", source, target, filesystemtype, mountflags);
+  vudev_printd("source [%s] target [%s] filesystemtype [%s] mountflags [%u]", source, target, filesystemtype, mountflags);
   struct vudev_operations_t *devops = NULL;
   void *dlhandle = vu_mod_dlopen(filesystemtype, RTLD_NOW);
   if(dlhandle == NULL || (devops = dlsym(dlhandle,"vudev_ops")) == NULL) {
-    printderror("dlhandle");
+    vudev_perror("dlhandle");
 		if(dlhandle != NULL)
 			dlclose(dlhandle);
 		errno = ENODEV;
@@ -300,12 +310,12 @@ int vu_vudev_mount(const char *source, const char *target,
   struct vudev_t *new;
   struct vu_service_t *s = vu_mod_getservice();
   if((new =  calloc(1, sizeof(struct vudev_t))) == NULL) {
-    printderror("new = calloc");
+    vudev_perror("new = calloc");
     dlclose(dlhandle);
     return -1;
   }
   if(vu_stat(source, &new->stat) == -1)
-    printderror("vu_stat");
+    vudev_perror("vu_stat");
   new->targetlen = strlen(target);
   new->target = strdup(target);
   new->dlhandle = dlhandle;
@@ -368,15 +378,16 @@ void vu_vudev_cleanup(uint8_t type, void *arg, int arglen, struct vuht_entry_t *
 }
 
 int vu_vudev_ioctl(int fd, unsigned long request, void *buf, uintptr_t addr, void *fdprivate) {
-  printkdebug(D, "vudev_ioctl: fd [%d] request [%X] buf [0x%X] addr [0x%X] fdprivate [0x%X]", fd, request, buf, addr, fdprivate);
   if(fd == -1) {
     int ret_value;
     struct vudev_t *vudev = vu_get_ht_private_data();
-		if(vudev->devops->ioctl_parms == NULL || (ret_value = vudev->devops->ioctl_parms(request)) == 0) {
+		if(vudev->devops->ioctl_parms == NULL ||
+      (ret_value = vudev->devops->ioctl_parms(request)) == 0) {
       errno = ENOSYS; return -1;
     }
     return ret_value;
   }
+  printkdebug(D, "vudev_ioctl: fd [%d] request [%X] buf [%p] addr [%p] fdprivate [%p]", fd, request, buf, addr, fdprivate);
   cur_vudevfd = fdprivate;
   if(cur_vudevfd->vudev->devops->ioctl == NULL) {
     errno = ENOSYS; return -1;

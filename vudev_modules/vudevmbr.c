@@ -28,12 +28,16 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
-#include <asm/ioctl.h>
+//#include <asm/ioctl.h>
 
 #include <linux/hdreg.h>
 
 #include <vudev.h>
 #include <vumodule.h>
+
+
+#include <linux/blkpg.h>
+#include <linux/fs.h>
 
 #define IDE_MAXPART 63
 #define IDE_BLOCKSIZE 512
@@ -43,7 +47,7 @@
 #define LE32_INT(X) (((X)[0])+(((X)[1])<<8)+(((X)[2])<<16)+(((X)[3])<<24))
 
 #define PART_ADDRBASE(partition) (((off_t) partition->LBAbegin) << IDE_BLOCKSIZE_LOG)
-#define PART_ADDRMAX(partition) (PART_ADDRBASE(partition) + (((off_t) partition->LBAnoblocks) << IDE_BLOCKSIZE_LOG))
+#define PART_ADDRMAX(partition) (((off_t) partition->LBAnoblocks) << IDE_BLOCKSIZE_LOG)
 
 struct vupartition_t {
 	int flags;
@@ -84,7 +88,7 @@ static inline void _read_mbr_geometry(struct hd_geometry *geom, const unsigned c
 
 /* return number subdev */
 static int _read_mbr(struct vumbr_t *vumbr) {
-  char vumbr_signature[2] = {0x55,0xAA};
+  char vumbr_signature[2] = {0x55, 0xAA};
   unsigned int ext_part_base = 0;
   struct {
   	char code[IDE_HEADER_OFFSET];
@@ -98,16 +102,15 @@ static int _read_mbr(struct vumbr_t *vumbr) {
   	} vumbrpart[4];
   	unsigned char signature[2];
   } vumbr_header;
-
 	pread64(vumbr->fd, &vumbr_header, sizeof(vumbr_header), (off_t) 0);
 	if(memcmp(vumbr_header.signature, vumbr_signature, 2) != 0) {
     printkdebug(D, "Bad signature in vumbr %x %x\n", vumbr_header.signature[0], vumbr_header.signature[1]);
     return 0;
   }
-  /* vumbr is okay. Read vumbr */
+  /* MBR is okay. Read MBR */
   int i, partno;
   unsigned int offset = 0;
-  for (i = partno = 0; i<4; i++) {
+  for (i = partno = 0; i < 4; i++) {
     if(vumbr_header.vumbrpart[i].type != 0) {
       struct vupartition_t *new = vumbr->part[partno++] = malloc(sizeof(struct vupartition_t));
       _read_mbr_geometry(&(vumbr->geometry), vumbr_header.vumbrpart[i].chs_end);
@@ -115,12 +118,11 @@ static int _read_mbr(struct vumbr_t *vumbr) {
       new->type = vumbr_header.vumbrpart[i].type;
       new->LBAbegin = LE32_INT(vumbr_header.vumbrpart[i].lba_begin);
       new->LBAnoblocks = LE32_INT(vumbr_header.vumbrpart[i].lba_noblocks);
-      printkdebug(D, "read vumbr: lba_begin [%lu] lba_noblocks [%lu]", new->LBAbegin, new->LBAnoblocks);
       if(vumbr_header.vumbrpart[i].type == 5) {/* extended partition*/
         if (ext_part_base == 0)
           ext_part_base = new->LBAbegin;
         else
-          printkdebug(D, "There are more than one extended partitions against the specifications", vumbr_header.vumbrpart[i].type);
+          vudev_printd("There are more than one extended partitions against the specifications", vumbr_header.vumbrpart[i].type);
       }
     }
   }
@@ -153,21 +155,18 @@ static int _read_mbr(struct vumbr_t *vumbr) {
   return partno;
 }
 
-static inline ssize_t _wrap_count_size(struct vupartition_t *partition, off_t offset, size_t count) {
-  if(partition) {
-		if((size_t) offset >= PART_ADDRMAX(partition))
-			return 0;
-		count = ((offset + (off_t) count) <= PART_ADDRMAX(partition))? count:(PART_ADDRMAX(partition) - offset);
-  }
-  return count;
+static inline ssize_t _wrap_offset(struct vupartition_t *partition, off_t offset) {
+	if(partition && ((offset >> IDE_BLOCKSIZE_LOG) <= partition->LBAnoblocks))
+    offset += PART_ADDRBASE(partition);
+  return offset;
 }
 
 static inline size_t _vumbr_pread64(int fd, void *buf, size_t count, off_t offset, struct vumbrfd_t *vumbrfd) {
-  return pread64(fd, buf, _wrap_count_size(vumbrfd->partition, vumbrfd->offset, count), offset);
+  return pread64(fd, buf, count, _wrap_offset(vumbrfd->partition, vumbrfd->offset));
 }
 
 static inline size_t _vumbr_pwrite64(int fd, const void *buf, size_t count, off_t offset, struct vumbrfd_t *vumbrfd) {
-  return pwrite64(fd, buf, _wrap_count_size(vumbrfd->partition, vumbrfd->offset, count), offset);
+  return pwrite64(fd, buf, count, _wrap_offset(vumbrfd->partition, vumbrfd->offset));
 }
 
 /******************************************************************************/
@@ -180,13 +179,10 @@ int vumbr_open(const char *pathname, int flags, mode_t mode) {
 		return -1;
   int partno = minor(vudev_get_devno());
   vumbrfd->rdonly = &(vumbr->rdonly[partno]);
-  if(partno > 0) {
-    if((vumbrfd->partition = vumbr->part[partno-1]) != NULL)
-      vumbrfd->offset = PART_ADDRBASE(vumbrfd->partition);
-    else {
-      free(vumbrfd); return -1;
-    }
-  }
+  if(partno > 0 && vumbr->part[partno-1] == NULL) {
+    free(vumbrfd); return -1;
+  } else
+    vumbrfd->partition = vumbr->part[partno-1];
 	vudev_set_fdprivate(vumbrfd);
   return vumbr->fd;
 }
@@ -233,8 +229,8 @@ off_t vumbr_lseek(int fd, off_t offset, int whence) {
   struct vumbrfd_t *vumbrfd = vudev_get_fdprivate();
 	switch (whence) {
 		case SEEK_SET:
-			ret_value = vumbrfd->offset = (vumbrfd->partition == NULL)? offset:(PART_ADDRBASE(vumbrfd->partition) + offset);
-			break;
+      ret_value = vumbrfd->offset = offset;
+      break;
 		case SEEK_CUR:
       ret_value = vumbrfd->offset = vumbrfd->offset + offset;
       break;
@@ -248,16 +244,13 @@ off_t vumbr_lseek(int fd, off_t offset, int whence) {
     }
     default: errno = EINVAL; ret_value = (off_t) -1; break;
 	}
-	printd("lseek: ret_value", ret_value);
   return ret_value;
 }
 
 unsigned long vumbr_ioctl_parms(unsigned long request) {
-  //printkdebug(D, "vumbr_ioctl_parms 0x%X", request);
-  switch (request) {
-    case HDIO_GETGEO: return _IOW('D', 0, struct hd_geometry);
-    default: return 0;
-	}
+	unsigned long parameter;
+	VUDEV_GET_IOCTL_PARM(request, parameter);
+	return parameter;
 }
 
 int vumbr_ioctl(int fd, unsigned long request, void *addr){
@@ -279,9 +272,10 @@ int vumbr_ioctl(int fd, unsigned long request, void *addr){
       struct vumbrfd_t *vumbrfd = vudev_get_fdprivate();
       if(vumbrfd->partition == NULL) {
         struct vumbr_t *vumbr = vudev_get_private_data();
-        *(int *)addr = (vumbr->size >> IDE_BLOCKSIZE_LOG);
-      } else
-        *(int *)addr = (vumbrfd->partition->LBAnoblocks) << IDE_BLOCKSIZE_LOG;
+        *((int *) addr) = (vumbr->size >> IDE_BLOCKSIZE_LOG);
+      } else {
+        *(int *)addr = vumbrfd->partition->LBAnoblocks;
+      }
       break;
     }
     case BLKGETSIZE64: {
@@ -307,10 +301,7 @@ int vumbr_ioctl(int fd, unsigned long request, void *addr){
       memcpy(addr, &(vumbr->geometry), sizeof(struct hd_geometry));
       break;
     }
-    default:
-      printkdebug(D, "UNDEFINE: [%lu]", request);
-      errno = ENOTTY;
-      return -1;
+    default: errno = EINVAL; return -1;
   }
   return 0;
 }
@@ -324,11 +315,12 @@ int vumbr_init(const char *source, unsigned long flags, const char *args, struct
 		return -1;
 	}
 	if((vumbr->size = lseek(vumbr->fd, 0, SEEK_END)) == -1)  {
-		close(vumbr->fd);
-		free(vumbr);
-	  return -1;
+    if(ioctl(vumbr->fd, BLKGETSIZE64, &(vumbr->size)) < 0) {
+      close(vumbr->fd);
+  		free(vumbr);
+  	  return -1;
+    }
 	}
-  printd("size: %lu", vumbr->size);
   vudev->nsubdev = _read_mbr(vumbr);
   vudev->stat.st_mode = (vudev->stat.st_mode & ~S_IFMT) | S_IFBLK;
   vudev->private_data = vumbr;

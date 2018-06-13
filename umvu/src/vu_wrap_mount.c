@@ -56,7 +56,7 @@ void wi_mount(struct vuht_entry_t *ht, struct syscall_descriptor_t *sd) {
 		/* call */
 		sd->action = SKIPIT;
 		ret_value = service_syscall(ht, __VU_mount)(source, target, filesystemtype, mountflags, data);
-		if (ret_value < 0) 
+		if (ret_value < 0)
       sd->ret_value = -errno;
 		xfree(source);
 		xfree(filesystemtype);
@@ -92,4 +92,3 @@ void wi_umount2(struct vuht_entry_t *ht, struct syscall_descriptor_t *sd) {
 			sd->ret_value = ret_value;
   }
 }
-

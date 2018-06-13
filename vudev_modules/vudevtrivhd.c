@@ -53,7 +53,7 @@ struct vuvhdfd_t {
 /******************************************************************************/
 /************************************UTILS*************************************/
 
-static inline ssize_t _wrap_count_size(size_t count, off_t offset) {
+static inline ssize_t _wrap_count(size_t count, off_t offset) {
   if((size_t) offset >= VUVHD_DISKSIZE)
     return 0;
   count = (offset + count <= VUVHD_DISKSIZE)? count:(VUVHD_DISKSIZE - offset);
@@ -61,13 +61,13 @@ static inline ssize_t _wrap_count_size(size_t count, off_t offset) {
 }
 
 ssize_t _vuvhd_pread64(void *buf, size_t count, off_t offset) {
-  count = _wrap_count_size(count, offset);
+  count = _wrap_count(count, offset);
   memcpy(buf, (vuvhd.diskdata + offset), count);
   return count;
 }
 
 ssize_t _vuvhd_pwrite64(const void *buf, size_t count, off_t offset) {
-  count = _wrap_count_size(count, offset);
+  count = _wrap_count(count, offset);
   memcpy((vuvhd.diskdata + offset), buf, count);
   return count;
 }
@@ -131,44 +131,35 @@ off_t vuvhd_lseek(int fd, off_t offset, int whence) {
 	return ret_value;
 }
 
-long vuvhd_ioctl_parms(unsigned long request) {
-  switch (request) {
-    case HDIO_GETGEO: return _IOW('D', 0, struct hd_geometry);
-    default: return 0;
-	}
+unsigned long vuvhd_ioctl_parms(unsigned long request) {
+  unsigned long parameter;
+  VUDEV_GET_IOCTL_PARM(request, parameter);
+  return parameter;
 }
 
 int vuvhd_ioctl(int fd, unsigned long request, void *addr){
   switch (request) {
-    case BLKROGET: {
+    case BLKROGET:
       *(int *)addr = (vuvhd.rdonly & RDONLY);
-      printd("BLKROGET [%d]", (vuvhd.rdonly & RDONLY));
       break;
-    }
-    case BLKROSET:{
+    case BLKROSET:
       vuvhd.rdonly |= (*(int *)addr > 0)? RDONLY:0;
       break;
-    }
     case BLKSSZGET:
       *(int *)addr = STD_SECTORSIZE;
   		break;
-    case BLKGETSIZE: {
+    case BLKGETSIZE:
       *(int *)addr = VUVHD_DISKSIZE;
 			break;
-    }
-    case BLKGETSIZE64: {
+    case BLKGETSIZE64:
       *(long long *)addr = VUVHD_DISKSIZE;
       break;
-    }
     case BLKRRPART: break;
     case HDIO_GETGEO: {
       memcpy(addr, &(vuvhd.geometry), sizeof(struct hd_geometry));
       break;
     }
-    default:
-      printd("UNDEFINE: [%lu]", request);
-      errno = EINVAL;
-      return -1;
+    default: errno = EINVAL; return -1;
   }
   return 0;
 }
@@ -187,7 +178,7 @@ int vuvhd_init(const char *source, unsigned long flags, const char *args, struct
 	vuvhd.geometry.cylinders = VUVHD_CYLINDERS;
 	vuvhd.size = vuvhd.geometry.heads * vuvhd.geometry.sectors * vuvhd.geometry.cylinders;
 	if ((vuvhd.diskdata = malloc(VUVHD_DISKSIZE)) == NULL) {
-		printderror("malloc"); return -1;
+		vudev_perror("malloc"); return -1;
 	}
   vudev->stat.st_mode = (vudev->stat.st_mode & ~S_IFMT) | S_IFCHR;
 	return 0;

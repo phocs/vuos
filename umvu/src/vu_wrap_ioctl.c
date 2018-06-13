@@ -41,7 +41,10 @@
 #include <vu_fd_table.h>
 #include <vu_wrapper_utils.h>
 
-/* TODO XXX ioctl can be a blocking syscall. 
+#define IOC_OUT_R 0x40000000
+#define IOC_IN_R	0x80000000
+
+/* TODO XXX ioctl can be a blocking syscall.
 	 ioctl should be changed to poll(NULL, 0, -1),
 	 the call of module's ioctl should be in the "during" phase,
 	 sending a PTRACE_INTERRUPT when done, and
@@ -71,23 +74,23 @@ void wi_ioctl(struct vuht_entry_t *ht, struct syscall_descriptor_t *sd) {
 		/* modern ioctls have already size and direction encoded in their request argument,
 			 so if the modules' call fails, reqargs gets the value of request */
 		reqargs = service_syscall(ht, __VU_ioctl)(-1, request, NULL, addr, private);
-		if (reqargs == (unsigned long) -1)
+		if ((int) reqargs == -1)
 			reqargs = request;
+		//printk("\nwi_ioctl: reqargs [%X] SIZE [%lu] CPYIN [%X] CPYOUT [%X]\n", reqargs, _IOC_SIZE(reqargs), (reqargs & IOC_IN_R), (reqargs & IOC_OUT_R));
 		len = _IOC_SIZE(reqargs);
-		if (len > 0) 
+		if (len > 0)
 			vu_alloc_arg(addr, buf, len, nested);
-		if (reqargs & IOC_IN) 
+		if (reqargs & IOC_IN_R)
 			vu_peek_arg(addr, buf, len, nested);
 		ret_value = service_syscall(ht, __VU_ioctl)(sfd, request, buf, addr, private);
 		if (ret_value < 0)
 			sd->ret_value = -errno;
 		else {
 			sd->ret_value = ret_value;
-			if (reqargs & IOC_OUT)
+			if (reqargs & IOC_OUT_R)
 				vu_poke_arg(addr, buf, len, nested);
 		}
 		if (buf)
 			vu_free_arg(buf, nested);
 	}
 }
-

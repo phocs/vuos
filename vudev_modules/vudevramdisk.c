@@ -33,16 +33,15 @@
 #include <strcase.h>
 #include <vumodule.h>
 
-#define STD_SIZE 64*1024
+#define STD_SIZE (64*1024)
 #define STD_SECTORSIZE 512
 
 #define READONLY 1
 #define MBR 2
 
+#define RAMDISK_SIZE(ramdisk) (ramdisk->rd_size * STD_SECTORSIZE)
 #define GET_CYLINDERS(ramdisk) \
   ((ramdisk->rd_size + (ramdisk->geometry.heads*ramdisk->geometry.sectors) -1) / (ramdisk->geometry.heads*ramdisk->geometry.sectors))
-
-#define RAMDISK_SIZE(ramdisk) (ramdisk->rd_size * STD_SECTORSIZE)
 
 struct vuramdisk_t {
   char flags;
@@ -90,7 +89,7 @@ static void set_mount_options(const char *args, struct vuramdisk_t *ramdisk) {
   free(old);
 }
 
-static inline ssize_t _wrap_count_size(size_t count, off_t offset) {
+static inline ssize_t _wrap_count(size_t count, off_t offset) {
   struct vuramdisk_t *ramdisk = vudev_get_private_data();
   if((size_t) offset >= RAMDISK_SIZE(ramdisk))
     return 0;
@@ -100,14 +99,14 @@ static inline ssize_t _wrap_count_size(size_t count, off_t offset) {
 
 ssize_t _vuramdisk_pread64(void *buf, size_t count, off_t offset) {
   struct vuramdisk_t *ramdisk = vudev_get_private_data();
-  count = _wrap_count_size(count, offset);
+  count = _wrap_count(count, offset);
   memcpy(buf, (ramdisk->diskdata + offset), count);
   return count;
 }
 
 ssize_t _vuramdisk_pwrite64(const void *buf, size_t count, off_t offset) {
   struct vuramdisk_t *ramdisk = vudev_get_private_data();
-  count = _wrap_count_size(count, offset);
+  count = _wrap_count(count, offset);
   memcpy((ramdisk->diskdata + offset), buf, count);
   return count;
 }
@@ -174,13 +173,10 @@ off_t vuramdisk_lseek(int fd, off_t offset, int whence) {
 	return ret_value;
 }
 
-
-long vuramdisk_ioctl_parms(unsigned long request) {
-  //printkdebug(D, "vumbr_ioctl_parms 0x%X", request);
-  switch (request) {
-    case HDIO_GETGEO: return _IOW('D', 0, struct hd_geometry);
-    default: return 0;
-	}
+unsigned long vuramdisk_ioctl_parms(unsigned long request) {
+  unsigned long parameter;
+  VUDEV_GET_IOCTL_PARM(request, parameter);
+  return parameter;
 }
 
 int vuramdisk_ioctl(int fd, unsigned long request, void *addr){
@@ -188,7 +184,6 @@ int vuramdisk_ioctl(int fd, unsigned long request, void *addr){
     case BLKROGET: {
       struct vuramdisk_t *ramdisk = vudev_get_private_data();
       *(int *)addr = (ramdisk->flags & READONLY);
-      printd("BLKROGET [%d]", (ramdisk->flags & READONLY));
       break;
     }
     case BLKROSET:{
@@ -215,10 +210,7 @@ int vuramdisk_ioctl(int fd, unsigned long request, void *addr){
       memcpy(addr, &(ramdisk->geometry), sizeof(struct hd_geometry));
       break;
     }
-    default:
-      printd("UNDEFINE: [%lu]", request);
-      errno = EINVAL;
-      return -1;
+    default: errno = EINVAL; return -1;
   }
   return 0;
 }

@@ -1,0 +1,1 @@
+/usr/bin/cc  -fPIC -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter  -shared -Wl,-soname,vudevtrivhd.so -o ../lib/vudevtrivhd.so CMakeFiles/vudevtrivhd.dir/vudevtrivhd.c.o 

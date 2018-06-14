@@ -338,7 +338,7 @@ int vu_vudev_mount(const char *source, const char *target,
     return -1;
   }
   set_mount_options(data, new);
-  new->path_ht = vuht_pathadd(CHECKPATH, source, target, filesystemtype, mountflags, data, s, new->nsubdev, vudev_confirm, new);
+  new->path_ht = vuht_pathadd(CHECKPATH, source, target, filesystemtype, mountflags, data, s, 1, vudev_confirm, new);
   if (new->devops->ioctl_parms)
     new->ioctl_ht = vuht_add(CHECKIOCTL, NULL, 0, s, vudev_confirm, new, 0);
   return 0;

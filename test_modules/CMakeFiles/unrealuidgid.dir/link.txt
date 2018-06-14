@@ -1,0 +1,1 @@
+/usr/bin/cc  -fPIC -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter  -shared -Wl,-soname,unrealuidgid.so -o ../lib/unrealuidgid.so CMakeFiles/unrealuidgid.dir/unrealuidgid.c.o 

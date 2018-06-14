@@ -1,0 +1,1 @@
+/usr/bin/cc  -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter   CMakeFiles/vu_rmmod.dir/vu_rmmod.c.o  -o ../bin/vu_rmmod -rdynamic 

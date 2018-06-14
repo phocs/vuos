@@ -1,0 +1,30 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/alessio/Desktop/vuos/cmd/vudebug.c
+stdio.h
+-
+stdlib.h
+-
+unistd.h
+-
+string.h
+-
+libgen.h
+-
+getopt.h
+-
+vulib.h
+-
+
+include/vulib.h
+unistd.h
+-
+sys/utsname.h
+-
+

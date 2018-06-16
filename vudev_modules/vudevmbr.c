@@ -28,8 +28,6 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
-//#include <asm/ioctl.h>
-
 #include <linux/hdreg.h>
 
 #include <vudev.h>
@@ -104,7 +102,7 @@ static int _read_mbr(struct vumbr_t *vumbr) {
   } vumbr_header;
 	pread64(vumbr->fd, &vumbr_header, sizeof(vumbr_header), (off_t) 0);
 	if(memcmp(vumbr_header.signature, vumbr_signature, 2) != 0) {
-    printkdebug(D, "Bad signature in vumbr %x %x\n", vumbr_header.signature[0], vumbr_header.signature[1]);
+    vudev_printd("Bad signature in vumbr %x %x", vumbr_header.signature[0], vumbr_header.signature[1]);
     return 0;
   }
   /* MBR is okay. Read MBR */
@@ -136,7 +134,7 @@ static int _read_mbr(struct vumbr_t *vumbr) {
     off_t base = ((off_t)(ext_part_base + offset)) << IDE_BLOCKSIZE_LOG;
     pread64(vumbr->fd, &vumbr_header, sizeof(vumbr_header), base);
     if(memcmp(vumbr_header.signature, vumbr_signature, 2) != 0) {
-      printkdebug(D, "Bad signature in block %lld=%x %x\n", base, vumbr_header.signature[0],vumbr_header.signature[1]);
+      vudev_printd("Bad signature in block %lld=%x %x", base, vumbr_header.signature[0],vumbr_header.signature[1]);
       ext_part_base = 0;
     } else {
       if(vumbr_header.vumbrpart[0].type != 0) {
@@ -156,17 +154,24 @@ static int _read_mbr(struct vumbr_t *vumbr) {
 }
 
 static inline ssize_t _wrap_offset(struct vupartition_t *partition, off_t offset) {
-	if(partition && ((offset >> IDE_BLOCKSIZE_LOG) <= partition->LBAnoblocks))
-    offset += PART_ADDRBASE(partition);
+	if(partition) {
+		if((offset >> IDE_BLOCKSIZE_LOG) < partition->LBAnoblocks)
+			offset += PART_ADDRBASE(partition);
+		else return -1;
+	}
   return offset;
 }
 
 static inline size_t _vumbr_pread64(int fd, void *buf, size_t count, off_t offset, struct vumbrfd_t *vumbrfd) {
-  return pread64(fd, buf, count, _wrap_offset(vumbrfd->partition, vumbrfd->offset));
+	if((offset = _wrap_offset(vumbrfd->partition, vumbrfd->offset)) < 0)
+		return 0;
+	return pread64(fd, buf, count, offset);
 }
 
 static inline size_t _vumbr_pwrite64(int fd, const void *buf, size_t count, off_t offset, struct vumbrfd_t *vumbrfd) {
-  return pwrite64(fd, buf, count, _wrap_offset(vumbrfd->partition, vumbrfd->offset));
+	if((offset = _wrap_offset(vumbrfd->partition, vumbrfd->offset)) < 0)
+		return 0;
+	return pwrite64(fd, buf, count, offset);
 }
 
 /******************************************************************************/
@@ -310,7 +315,9 @@ int vumbr_init(const char *source, unsigned long flags, const char *args, struct
   struct vumbr_t *vumbr;
 	if((vumbr = calloc(1, sizeof(struct vumbr_t))) == NULL)
 		return -1;
+	//vudev_printd("before open [%s]", source);
 	if((vumbr->fd = open(source, O_RDWR|O_CLOEXEC)) == -1) {
+		vudev_perror("open");
 		free(vumbr);
 		return -1;
 	}

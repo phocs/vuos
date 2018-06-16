@@ -1,1 +1,0 @@
-/usr/bin/cc  -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter   CMakeFiles/vustack.dir/vustack.c.o  -o ../bin/vustack -rdynamic 

@@ -6,21 +6,22 @@ static inline unsigned long hashnodeid (const char *s);
 
 
 int vu_vufuse_lstat(char *pathname, struct vu_stat *buf, int flags, int sfd, void *private) {
+	printk("LSTAT path:%s\n", pathname);
 
 	struct fuse_context *fc=vu_get_ht_private_data();
 	int rv;
-	
+
 	if (sfd >= 0 && private != NULL) {
 		struct fileinfo *ft= (struct fileinfo*) private;
 		pathname=FILEPATH(ft);
-	} 		
+	}
 
-	fc->pid=umvu_gettid(); 
+	fc->pid=umvu_gettid();
 	memset(buf, 0, sizeof(struct vu_stat));
 	rv = fc->fuse->fops.getattr(pathname, buf);
-	
+
 	printkdebug(F,"LSTAT path:%s status: %s retvalue:%d", pathname, rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	
+
 	if (rv<0) ERRNO_N_RETURN(-rv,-1)
 	else {
 		/*heuristics for file system which does not set st_ino */
@@ -40,7 +41,7 @@ int vu_vufuse_access(char *path, int mode, int flags) {
 	int rv=0;
 	struct vu_stat buf;
 	assert(fc);
-	fc->pid=umvu_gettid(); 
+	fc->pid=umvu_gettid();
 
 	/* "default permission" management */
 	if (fc->fuse->fops.access != NULL)
@@ -49,7 +50,7 @@ int vu_vufuse_access(char *path, int mode, int flags) {
 	{
 		rv = fc->fuse->fops.getattr( path, &buf);
 	}
-	
+
 	printkdebug(F,"ACCESS path:%s mode:%s%s%s%s satus:%s retvalue:%d",path,
 				(mode & R_OK) ? "R_OK": "", (mode & W_OK) ? "W_OK": "",
 				(mode & X_OK) ? "X_OK": "", (mode & F_OK) ? "F_OK": "",
@@ -57,7 +58,7 @@ int vu_vufuse_access(char *path, int mode, int flags) {
 
 	if (rv < 0) ERRNO_N_RETURN(-rv,-1)
 	else ERRNO_N_RETURN(0,0)
-	
+
 }
 
 
@@ -68,7 +69,7 @@ ssize_t vu_vufuse_readlink(char *path, char *buf, size_t bufsiz) {
 	fc->pid=umvu_gettid();
 
 	rv = fc->fuse->fops.readlink(path, buf, bufsiz);
-	
+
 	if (rv == 0)
 		rv=strnlen(buf,bufsiz);
 
@@ -93,7 +94,7 @@ int vu_vufuse_open(const char *pathname, int flags, mode_t mode, void **private)
 	ft->context = fc;
 	ft->pos = 0;
 	ft->ffi.flags = flags & ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
-	ft->ffi.writepage = 0; 
+	ft->ffi.writepage = 0;
 	ft->node = NULL;
 	ft->dirinfo = NULL;
 	ft->dirpos = NULL;
@@ -114,21 +115,21 @@ int vu_vufuse_open(const char *pathname, int flags, mode_t mode, void **private)
 
 		if((flags & O_TRUNC) && (flags & O_ACCMODE)!= O_RDONLY){
 			rv=fc->fuse->fops.truncate(pathname, 0);
-			
+
 			printkdebug(F,"TRUNCATE path:%s flags:%x status:%s retvalue:%d",pathname,flags,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 			if (rv < 0) ERRNO_N_RETURN(-rv,-1)
 		}
 	}
 	/* create the file: create or (obsolete mode) mknod+open */
-	if ((flags & O_CREAT) && (exists_err != 0)){ 
-		
+	if ((flags & O_CREAT) && (exists_err != 0)){
+
 		if (fc->fuse->fops.create != NULL) {
 			rv = fc->fuse->fops.create(pathname, S_IFREG | mode, &ft->ffi);
-			
+
 			printkdebug(F,"CREATE path:%s flags:%x status:%s retvalue:%d",pathname,flags,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 		} else {
 			rv = fc->fuse->fops.mknod(pathname, S_IFREG | mode, (dev_t) 0);
-			
+
 			printkdebug(F,"MKNOD path:%s flags:%x status:%s retvalue:%d",pathname,flags,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 			if (rv < 0)  ERRNO_N_RETURN(-rv,-1)
 			rv = fc->fuse->fops.open(pathname, &ft->ffi);
@@ -144,32 +145,32 @@ int vu_vufuse_open(const char *pathname, int flags, mode_t mode, void **private)
 	} else { /* the file exists! */
 		if ((flags & O_DIRECTORY) && fc->fuse->fops.readdir)
 			rv = fc->fuse->fops.opendir(pathname, &ft->ffi);
-		else 
+		else
 			rv = fc->fuse->fops.open(pathname, &ft->ffi);
 	}
 
 	printkdebug(F,"OPEN path:%s flags:%x status:%s retvalue:%d",pathname,flags,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 	if (rv < 0)	 ERRNO_N_RETURN(-rv,-1)
 	else {
-		
+
 		ft->node = node_add(fc->fuse, (char *)pathname);
 		fc->fuse->inuse++;
 		*private = ft;
 		/*file related function will check sfd >= 0 before accessing fdprivate. That sfd will have the value of rv, so returning 0 is ok*/
-		return rv; 
+		return rv;
 	}
 }
 
 int vu_vufuse_close(int fd, void *fdprivate){
 	int rv;
-	
+
 	if(fd < 0 || fdprivate == NULL)
 		ERRNO_N_RETURN(EBADF,-1)
 
 	struct fileinfo *ft= (struct fileinfo *)fdprivate;
 
 	struct fuse_context *fc=ft->context;
-	fc->pid=umvu_gettid(); 
+	fc->pid=umvu_gettid();
 
 	if (!(ft->ffi.flags & O_DIRECTORY)) {
 		rv=fc->fuse->fops.flush(FILEPATH(ft), &ft->ffi);
@@ -189,7 +190,7 @@ int vu_vufuse_close(int fd, void *fdprivate){
 
 	node_del(ft->node);
 	vucleandirinfo(ft->dirinfo);
-	
+
 	free(fdprivate);
 	fdprivate = NULL;
 
@@ -207,14 +208,14 @@ ssize_t vu_vufuse_read (int fd, void *buf, size_t count, void *fdprivate)
 	if(fd < 0 || fdprivate == NULL)
 		ERRNO_N_RETURN(EBADF,-1)
 
-	struct fileinfo *ft = (struct fileinfo*)fdprivate; 
-	if ( (ft->ffi.flags & O_ACCMODE) == O_WRONLY) 
+	struct fileinfo *ft = (struct fileinfo*)fdprivate;
+	if ( (ft->ffi.flags & O_ACCMODE) == O_WRONLY)
 		ERRNO_N_RETURN(EBADF,-1)
 	else if (ft->pos == ft->size)
 		return 0;
 	else {
 		struct fuse_context *fc=ft->context;
-		fc->pid=umvu_gettid(); 
+		fc->pid=umvu_gettid();
 		rv = fc->fuse->fops.read(
 				FILEPATH(ft),
 				buf,
@@ -240,11 +241,11 @@ ssize_t vu_vufuse_write(int fd, const void *buf, size_t count, void *fdprivate)
 
 	struct fileinfo *ft = (struct fileinfo *) fdprivate;
 	if ( (ft->ffi.flags & O_ACCMODE) == O_RDONLY) {
-		
+
 		ERRNO_N_RETURN(EBADF,-1)
 	} else {
 		struct fuse_context *fc=ft->context;
-		fc->pid=umvu_gettid(); 
+		fc->pid=umvu_gettid();
 		if (ft->ffi.flags & O_APPEND)
 			rv=(int)vu_vufuse_lseek(fd,0,SEEK_END,fdprivate);
 		if (rv!=-1) {
@@ -272,8 +273,8 @@ int vu_vufuse_getdents64(unsigned int fd, struct dirent64 *dirp, unsigned int co
 	struct fileinfo *ft= (struct fileinfo *)private;
 	unsigned int curoffs=0;
 
-	if (ft->dirinfo == NULL) 
-		ft->dirinfo = vufilldirinfo(ft); 
+	if (ft->dirinfo == NULL)
+		ft->dirinfo = vufilldirinfo(ft);
 
 	if (ft->dirinfo==NULL)
 	 	return 0;
@@ -282,7 +283,7 @@ int vu_vufuse_getdents64(unsigned int fd, struct dirent64 *dirp, unsigned int co
 		char *base=(char *)dirp;
 		int last=0;
 
-		if (ft->dirpos==NULL) 
+		if (ft->dirpos==NULL)
 			ft->dirpos=ft->dirinfo;
 		else
 			last=(ft->dirpos==ft->dirinfo);
@@ -331,7 +332,7 @@ off_t vu_vufuse_lseek(int fd, off_t offset, int whence, void *fdprivate)
 				struct fuse_context *fc=ft->context;
 				assert(fc != NULL);
 
-				fc->pid=umvu_gettid(); 
+				fc->pid=umvu_gettid();
 				rv = fc->fuse->fops.getattr(FILEPATH(ft),&buf);
 				if (rv>=0) {
 					ft->pos = buf.st_size + offset;
@@ -364,10 +365,10 @@ int vu_vufuse_statfs (const char *pathname, struct statfs *buf, int fd, void *fd
 			buf->f_frsize =svfs.f_frsize;
 			/* fsid is left zero */
 			return rv;
-		} else 
+		} else
 			ERRNO_N_RETURN(-rv,-1)
 	}
-	else 
+	else
 		ERRNO_N_RETURN(ENOSYS,-1)
 }
 
@@ -381,29 +382,29 @@ int vu_vufuse_unlink (const char *pathname){
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
-	if ((exists_err = fc->fuse->fops.getattr(pathname, &buf)) < 0) 
+	if ((exists_err = fc->fuse->fops.getattr(pathname, &buf)) < 0)
 		ERRNO_N_RETURN(ENOENT,-1)
-	
+
 	/* hardremove or the file is not open -> unlink */
 	if (fc->fuse->flags & FUSE_HARDREMOVE || fc->fuse->fops.rename == NULL ||
-			(node = node_search(fc->fuse, (char *)pathname)) == NULL) {		
+			(node = node_search(fc->fuse, (char *)pathname)) == NULL) {
 		rv = fc->fuse->fops.unlink(pathname);
-		
+
 		printkdebug(F,"UNLINK path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 	} else {
 		/* rename the file ! */
 		char *hiddenpath=node_hiddenpath(node);
 		rv = fc->fuse->fops.rename(pathname,hiddenpath);
-		
+
 		printkdebug(F,"RENAME(UNLINK) path:%s hiddenpath:%s status:%s retvalue:%d",pathname,hiddenpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-		if (rv == 0) 
+		if (rv == 0)
 			node_newpath(node,hiddenpath);
 		free(hiddenpath);
 	}
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
@@ -421,16 +422,16 @@ int vu_vufuse_truncate(const char *path, off_t length, int fd, void *fdprivate){
 
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
 	rv = fc->fuse->fops.truncate(path,(off_t)length);
 
 	printkdebug(F,"TRUNCATE path:%s status:%s retvalue:%d",path,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
-		return rv;	
+		return rv;
 
 }
 
@@ -446,7 +447,7 @@ int vu_vufuse_mkdir (const char *pathname, mode_t mode){
 	rv = fc->fuse->fops.mkdir( pathname, mode);
 
 	printkdebug(F,"MKDIR path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
@@ -460,7 +461,7 @@ int vu_vufuse_mknod (const char *pathname, mode_t mode, dev_t dev)
 
 	if (fc->fuse->flags & MS_RDONLY)
 		 ERRNO_N_RETURN(EROFS,-1)
-		
+
 	if (S_ISREG(mode)) {
 		struct fuse_file_info fi;
 		memset(&fi, 0, sizeof(fi));
@@ -484,13 +485,13 @@ int vu_vufuse_rmdir(const char *pathname){
 	assert(fc!=NULL);
 	fc->pid=umvu_gettid();
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
-	
+
 	rv= fc->fuse->fops.rmdir( pathname);
-	
+
 	printkdebug(F,"RMDIR path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
@@ -504,58 +505,58 @@ int vu_vufuse_chmod (const char *pathname, mode_t mode, int fd, void *fdprivate)
 	char *unpath;
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
-	
+
 	if (fd >= 0 && fdprivate != NULL) {
 		struct fileinfo *ft= (struct fileinfo*) fdprivate;
-		pathname=FILEPATH(ft); 
-	} 
+		pathname=FILEPATH(ft);
+	}
 
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
 	rv= fc->fuse->fops.chmod(pathname, mode);
 
 	printkdebug(F,"CHMOD path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	return rv;
 }
 
 int vu_vufuse_lchown (const char *pathname, uid_t owner, gid_t group,int fd, void *fdprivate){
-	
+
 	struct fuse_context *fc = vu_get_ht_private_data();
 	int rv=0;
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
-	
+
 	if (fd >= 0 && fdprivate != NULL) {
 		struct fileinfo *ft= (struct fileinfo*) fdprivate;
 		pathname=FILEPATH(ft);
-	} 
+	}
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
 	rv = fc->fuse->fops.chown(pathname, owner, group);
 
 	printkdebug(F,"LCHOWN  status:%s retvalue:%d",rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
 }
 
-int vu_vufuse_utimensat(int dirfd, const char *pathname, 
+int vu_vufuse_utimensat(int dirfd, const char *pathname,
 		const struct timespec times[2], int flags, int fd, void *fdprivate){
 	struct fuse_context *fc = vu_get_ht_private_data();
 	int rv;
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
-	
+
 
 	if (fc->fuse->fops.utimens) {
 		struct timespec tvspec[2];
@@ -571,22 +572,22 @@ int vu_vufuse_utimensat(int dirfd, const char *pathname,
 		} else {
 			rv = fc->fuse->fops.utimens( pathname, times);
 		}
-		
+
 		printkdebug(F,"UTIMESAT path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 	} else {
 		struct utimbuf buf;
-		if (times == NULL) 
+		if (times == NULL)
 			buf.actime=buf.modtime=time(NULL);
 		else {
 			buf.actime=times[0].tv_sec;
 			buf.modtime=times[1].tv_sec;
 		}
 		rv = fc->fuse->fops.utime( pathname , &buf);
-		
+
 		printkdebug(F,"UTIME path:%s status:%s retvalue:%d",pathname,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 	}
-	
-	if (rv < 0) 
+
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
@@ -598,13 +599,13 @@ int vu_vufuse_symlink (const char *target, const char *linkpath){
 	int rv=0;
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
 	rv = fc->fuse->fops.symlink( target, linkpath);
-	
-	printkdebug(F,"SYMLINK target:%s linkpath:%s status:%s retvalue:%d",target,linkpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);	
-	if (rv < 0) 
+
+	printkdebug(F,"SYMLINK target:%s linkpath:%s status:%s retvalue:%d",target,linkpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
 		return rv;
@@ -617,16 +618,16 @@ int vu_vufuse_link (const char *target, const char *linkpath){
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
 
-	if (fc->fuse->flags & MS_RDONLY) 
+	if (fc->fuse->flags & MS_RDONLY)
 		ERRNO_N_RETURN(EROFS,-1)
 
 	rv = fc->fuse->fops.link(target, linkpath);
-		
-	printkdebug(F,"LINK oldpath:%s newpath:%s status:%s retvalue:%d",target,linkpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);		
-	if (rv < 0) 
+
+	printkdebug(F,"LINK oldpath:%s newpath:%s status:%s retvalue:%d",target,linkpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else
-		return rv;	
+		return rv;
 }
 
 int vu_vufuse_rename (const char *target, const char *linkpath, int flags){
@@ -635,18 +636,18 @@ int vu_vufuse_rename (const char *target, const char *linkpath, int flags){
 	int rv=0;
 	assert(fc != NULL);
 	fc->pid=umvu_gettid();
-	
+
 	rv = fc->fuse->fops.rename(target,linkpath);
-	
+
 	printkdebug(F,"RENAME oldpath:%s newpath:%s status:%s retvalue:%d",target,linkpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
-	if (rv < 0) 
+	if (rv < 0)
 		ERRNO_N_RETURN(-rv,-1)
 	else {
 		struct fuse_node *oldnode=node_search(fc->fuse,(char *)target);
 		struct fuse_node *newnode=node_search(fc->fuse,(char *)linkpath);
 		if (newnode != NULL) {
 			char *hiddenpath=node_hiddenpath(newnode);
-			
+
 			rv = fc->fuse->fops.rename(linkpath,hiddenpath);
 			printkdebug(F,"RENAME oldpath:%s newpath:%s status:%s retvalue:%d",linkpath,hiddenpath,rv ? "ERROR" : "SUCCESS", (rv < 0) ? -rv : 0);
 			if (rv == 0)
@@ -655,7 +656,7 @@ int vu_vufuse_rename (const char *target, const char *linkpath, int flags){
 		}
 		if (oldnode != NULL)
 			node_newpath(oldnode,(char *)linkpath);
-		return rv;	
+		return rv;
 	}
 }
 

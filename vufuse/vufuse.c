@@ -74,8 +74,6 @@ static void *startmain(void *vsmo)
 int vu_vufuse_mount(const char *source, const char *target, const char *filesystemtype,
 	 unsigned long mountflags, const void *data) {
 
-		printk("vu_vufuse_mount %s %s %s\n", source, target, filesystemtype);
-
 	struct stat target_stat;
 #if 0
     if ((vu_stat(target, &target_stat) != 0) || !S_ISDIR(target_stat.st_mode))

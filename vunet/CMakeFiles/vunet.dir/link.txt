@@ -1,1 +1,0 @@
-/usr/bin/cc  -fPIC -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter  -shared -Wl,-soname,vunet.so -o vunet.so CMakeFiles/vunet.dir/vunet.c.o CMakeFiles/vunet.dir/vunet_ioctl.c.o 

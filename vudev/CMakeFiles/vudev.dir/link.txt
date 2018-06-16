@@ -1,1 +1,0 @@
-/usr/bin/cc  -fPIC -ggdb -Wall -Wextra -pedantic -std=gnu11 -Wno-incompatible-pointer-types -Wno-unused-parameter  -shared -Wl,-soname,vudev.so -o vudev.so CMakeFiles/vudev.dir/vudev.c.o 

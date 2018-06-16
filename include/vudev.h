@@ -46,7 +46,7 @@ struct vudev_operations_t {
 };
 
 #define vudev_printd(fmt, ...) printkdebug(D, "%s " fmt, __func__, ##__VA_ARGS__)
-#define vudev_perror(str) if(errno) vudev_printd("error [%s]:[%s]", str, strerror(errno))
+#define vudev_perror(str) vudev_printd("error [%s]:[%s]", str, strerror(errno))
 
 void *vudev_get_fdprivate(void);
 void *vudev_get_private_data(void);

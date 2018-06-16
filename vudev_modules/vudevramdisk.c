@@ -173,46 +173,37 @@ off_t vuramdisk_lseek(int fd, off_t offset, int whence) {
 	return ret_value;
 }
 
+int vuramdisk_ioctl(int fd, unsigned long request, void *addr){
+  struct vuramdisk_t *ramdisk = vudev_get_private_data();
+  switch (request) {
+    case BLKROGET:
+      *(int *)addr = (ramdisk->flags & READONLY);
+      break;
+    case BLKROSET:
+      ramdisk->flags |= (*(int *)addr > 0)? READONLY:0;
+      break;
+    case BLKSSZGET:
+      *(int *)addr = STD_SECTORSIZE;
+  		break;
+    case BLKGETSIZE:
+      *(int *)addr = ramdisk->rd_size * ((ramdisk->flags & MBR)? 1:STD_SECTORSIZE);
+			break;
+    case BLKGETSIZE64:
+      *(long long *)addr = ramdisk->rd_size * STD_SECTORSIZE;
+      break;
+    case BLKRRPART: break;
+    case HDIO_GETGEO:
+      memcpy(addr, &(ramdisk->geometry), sizeof(struct hd_geometry));
+      break;
+    default: errno = EINVAL; return -1;
+  }
+  return 0;
+}
+
 unsigned long vuramdisk_ioctl_parms(unsigned long request) {
   unsigned long parameter;
   VUDEV_GET_IOCTL_PARM(request, parameter);
   return parameter;
-}
-
-int vuramdisk_ioctl(int fd, unsigned long request, void *addr){
-  switch (request) {
-    case BLKROGET: {
-      struct vuramdisk_t *ramdisk = vudev_get_private_data();
-      *(int *)addr = (ramdisk->flags & READONLY);
-      break;
-    }
-    case BLKROSET:{
-      struct vuramdisk_t *ramdisk = vudev_get_private_data();
-      ramdisk->flags |= (*(int *)addr > 0)? READONLY:0;
-      break;
-    }
-    case BLKSSZGET:
-      *(int *)addr = STD_SECTORSIZE;
-  		break;
-    case BLKGETSIZE: {
-      struct vuramdisk_t *ramdisk = vudev_get_private_data();
-      *(int *)addr = ramdisk->rd_size * ((ramdisk->flags & MBR)? 1:STD_SECTORSIZE);
-			break;
-    }
-    case BLKGETSIZE64: {
-      struct vuramdisk_t *ramdisk = vudev_get_private_data();
-      *(long long *)addr = ramdisk->rd_size * STD_SECTORSIZE;
-      break;
-    }
-    case BLKRRPART: break;
-    case HDIO_GETGEO: {
-      struct vuramdisk_t *ramdisk = vudev_get_private_data();
-      memcpy(addr, &(ramdisk->geometry), sizeof(struct hd_geometry));
-      break;
-    }
-    default: errno = EINVAL; return -1;
-  }
-  return 0;
 }
 
 int vuramdisk_init(const char *source, unsigned long flags, const char *args, struct vudev_t *vudev) {

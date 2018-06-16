@@ -41,8 +41,8 @@
 #include <vu_fd_table.h>
 #include <vu_wrapper_utils.h>
 
-#define IOC_OUT_R 0x40000000
-#define IOC_IN_R	0x80000000
+#define VU_IOC_OUT 0x40000000
+#define VU_IOC_IN	0x80000000
 
 /* TODO XXX ioctl can be a blocking syscall.
 	 ioctl should be changed to poll(NULL, 0, -1),
@@ -76,18 +76,18 @@ void wi_ioctl(struct vuht_entry_t *ht, struct syscall_descriptor_t *sd) {
 		reqargs = service_syscall(ht, __VU_ioctl)(-1, request, NULL, addr, private);
 		if ((int) reqargs == -1)
 			reqargs = request;
-		//printk("\nwi_ioctl: reqargs [%X] SIZE [%lu] CPYIN [%X] CPYOUT [%X]\n", reqargs, _IOC_SIZE(reqargs), (reqargs & IOC_IN_R), (reqargs & IOC_OUT_R));
+		//printk("\nwi_ioctl: reqargs [%X] SIZE [%lu] CPYIN [%X] CPYOUT [%X]\n", reqargs, _IOC_SIZE(reqargs), (reqargs & VU_IOC_IN), (reqargs & VU_IOC_OUT));
 		len = _IOC_SIZE(reqargs);
 		if (len > 0)
 			vu_alloc_arg(addr, buf, len, nested);
-		if (reqargs & IOC_IN_R)
+		if (reqargs & VU_IOC_IN)
 			vu_peek_arg(addr, buf, len, nested);
 		ret_value = service_syscall(ht, __VU_ioctl)(sfd, request, buf, addr, private);
 		if (ret_value < 0)
 			sd->ret_value = -errno;
 		else {
 			sd->ret_value = ret_value;
-			if (reqargs & IOC_OUT_R)
+			if (reqargs & VU_IOC_OUT)
 				vu_poke_arg(addr, buf, len, nested);
 		}
 		if (buf)

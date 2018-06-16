@@ -18,8 +18,6 @@
  *
  */
 
-
-
 #include <errno.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -46,10 +44,6 @@
 #define RT_BIT(bit)                 (1UL << (bit))
 #define VD_OPEN_FLAGS_NORMAL        0
 #define VD_OPEN_FLAGS_READONLY      RT_BIT(0)
-
-
-#define LOG_ENABLED 1
-#define LOG_USE_C99 1
 
 static void *vboxdd_hdl;
 static int vboxdd_count;
@@ -130,10 +124,11 @@ static void dlunload_vboxdd(void) {
 }
 
 static inline ssize_t _vuvdi_alined_pread64(void *disk, void *buf, size_t count, off_t offset) {
+	if(count == 0) return 0;
 	if (IS_ALIGNED(offset, count)) {
 		if(vboxdd_read(disk, offset, buf, count) < 0)
 			goto read_err_exit;
-		return 0;
+		return count;
 	}
 	char tmp_buf[STD_SECTORSIZE];
 	size_t over_off, tmp_count, until_count = count;
@@ -150,7 +145,7 @@ static inline ssize_t _vuvdi_alined_pread64(void *disk, void *buf, size_t count,
 	}
 	/* Read all blocks contained in count. */
 	if((tmp_count = (until_count & ~STD_SECTORSIZE_OFFSET_MASK))) {
-		if(vboxdd_read(disk, offset, tmp_buf, tmp_count) < 0)
+		if(vboxdd_read(disk, offset, buf, tmp_count) < 0)
 			goto read_err_exit;
 		buf = ((char *) buf) + tmp_count;
 		offset += tmp_count;
@@ -161,14 +156,14 @@ static inline ssize_t _vuvdi_alined_pread64(void *disk, void *buf, size_t count,
 			goto read_err_exit;
 		memcpy(buf, tmp_buf, until_count);
 	}
-	return 0;
+	return count;
 read_err_exit:
-	errno = EIO;
-	return -1;
+	errno = EIO; return -1;
 }
 
 static inline ssize_t _vuvdi_alined_pwrite64(void *disk, const void *buf, size_t count, off_t offset) {
-	if (IS_ALIGNED(offset, count)) {
+	if(count == 0) return 0;
+	if(IS_ALIGNED(offset, count)) {
 		if(vboxdd_write(disk, offset, buf, count) < 0)
 			goto write_err_exit;
 		return count;
@@ -184,13 +179,13 @@ static inline ssize_t _vuvdi_alined_pwrite64(void *disk, const void *buf, size_t
 		memcpy((tmp_buf + over_off), buf, tmp_count); /* Write difference. */
 		if(vboxdd_write(disk, (offset - over_off), tmp_buf, STD_SECTORSIZE) < 0)
 			goto write_err_exit;
-		buf = ((char *) buf) + tmp_count;
+		buf = ((char *) buf) + (tmp_count);
 		offset += tmp_count;
 		until_count -= tmp_count;
 	}
 	/* Write all blocks contained in count. */
 	if((tmp_count = (until_count & ~STD_SECTORSIZE_OFFSET_MASK))) {
-		if(vboxdd_write(disk, offset, tmp_buf, tmp_count) < 0)
+		if(vboxdd_write(disk, offset, buf, tmp_count) < 0)
 			goto write_err_exit;
 		buf = ((char *) buf) + tmp_count;
 		offset += tmp_count;
@@ -203,17 +198,21 @@ static inline ssize_t _vuvdi_alined_pwrite64(void *disk, const void *buf, size_t
 		if(vboxdd_write(disk, offset, tmp_buf, STD_SECTORSIZE) < 0)
 			goto write_err_exit;
 	}
-	return 0;
+	return count;
 write_err_exit:
-	errno = EIO;
-	return -1;
+	errno = EIO; return -1;
+}
+
+static inline size_t _wrap_count(size_t size, off_t *offset, size_t count) {
+	if(*offset > (off_t) size) *offset = size;
+	if((*offset + count) > size) count = size - *offset;
+	return count;
 }
 
 /******************************************************************************/
 /***********************************SYSCALL************************************/
 
 int vuvdi_open(const char *pathname, int flags, mode_t mode) {
-	vudev_printd("path [%s]", pathname);
 	struct vuvdi_t *vdi = vudev_get_private_data();
   struct vuvdifd_t *vdifd = calloc(1, sizeof(struct vuvdifd_t));
   if(vdifd == NULL)
@@ -224,46 +223,44 @@ int vuvdi_open(const char *pathname, int flags, mode_t mode) {
 }
 
 int vuvdi_close(int fd) {
-  free(vudev_get_fdprivate());
+	struct vuvdi_t *vdi = vudev_get_private_data();
+	free(vudev_get_fdprivate());
+	vboxdd_flush(vdi->disk);
   return 0;
 }
 
 ssize_t vuvdi_read(int fd, void *buf, size_t count) {
 	struct vuvdi_t *vdi = vudev_get_private_data();
 	struct vuvdifd_t *vdifd = vudev_get_fdprivate();
-	vudev_printd("offset [%lu] count [%d]", vdifd->offset, count);
-	if(_vuvdi_alined_pread64(vdi->disk, buf, count, vdifd->offset) == 0) {
-		vdifd->offset += count;
-		return count;
-	}
-	return -1;
+	//vudev_printd("offset [%lu] count [%d]", vdifd->offset, count);
+	count = _wrap_count(vdi->size, &(vdifd->offset), count);
+	ssize_t ret_value = _vuvdi_alined_pread64(vdi->disk, buf, count, vdifd->offset);
+	if(ret_value > 0) vdifd->offset += ret_value;
+	return ret_value;
 }
 
 ssize_t vuvdi_write(int fd, const void *buf, size_t count) {
 	struct vuvdi_t *vdi = vudev_get_private_data();
 	struct vuvdifd_t *vdifd = vudev_get_fdprivate();
-	vudev_printd("offset [%lu] count [%d]", vdifd->offset, count);
-	if(_vuvdi_alined_pwrite64(vdi->disk, buf, count, vdifd->offset) == 0) {
-		vdifd->offset += count;
-		return count;
-	}
-	return -1;
+	//vudev_printd("offset [%lu] count [%d]", vdifd->offset, count);
+	count = _wrap_count(vdi->size, &(vdifd->offset), count);
+	ssize_t ret_value = _vuvdi_alined_pwrite64(vdi->disk, buf, count, vdifd->offset);
+	if(ret_value > 0) vdifd->offset += ret_value;
+	return ret_value;
 }
 
 ssize_t vuvdi_pread64(int fd, void *buf, size_t count, off_t offset) {
 	struct vuvdi_t *vdi = vudev_get_private_data();
-	vudev_printd("offset [%lu] count [%d]", offset, count);
-	if(_vuvdi_alined_pread64(vdi->disk, buf, count, offset) == 0)
-		return count;
-	return -1;
+	//vudev_printd("offset [%lu] count [%d]", offset, count);
+	count = _wrap_count(vdi->size, &offset, count);
+	return _vuvdi_alined_pread64(vdi->disk, buf, count, offset);
 }
 
 ssize_t vuvdi_pwrite64(int fd, const void *buf, size_t count, off_t offset) {
 	struct vuvdi_t *vdi = vudev_get_private_data();
-	vudev_printd("offset [%lu] count [%d]", offset, count);
-	if(_vuvdi_alined_pwrite64(vdi->disk, buf, count, offset) == 0)
-		return count;
-	return -1;
+	//vudev_printd("offset [%lu] count [%d]", offset, count);
+	count = _wrap_count(vdi->size, &offset, count);
+	return _vuvdi_alined_pwrite64(vdi->disk, buf, count, offset);
 }
 
 off_t vuvdi_lseek(int fd, off_t offset, int whence) {

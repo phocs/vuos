@@ -1,85 +1,59 @@
+/*
+ *   VUOS: view OS project
+ *   Copyright (C) 2018  Renzo Davoli <renzo@cs.unibo.it>
+ *   VirtualSquare team.
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 #ifndef VUFUSE_H
 #define VUFUSE_H
-
-#include <unistd.h>
-#include <assert.h>
-#include <fcntl.h>
-#include <string.h>
-#include <utime.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <sys/ipc.h>
-#include <stdarg.h>
-#include <math.h>
-#include <values.h>
-#include <grp.h>
-#include <pwd.h>
-#include <errno.h>
-#include <dirent.h>
-
-#include <bits/wordsize.h>
-#include <linux/types.h>
-#include <linux/unistd.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/mount.h>
-#include <sys/statfs.h>
-#include <sys/statvfs.h>
-
 #include <fuse.h>
-
-#include "vufusestd.h"
-#include "vufuse_node.h"
-#include "vufuseargs.h"
-
-
-#include <vumodule.h>
-VU_PROTOTYPES(vufuse)
 
 #ifndef VUFUSE_FUSE_VERSION
 #define VUFUSE_FUSE_VERSION 29
 #endif
 
-#if ( FUSE_MINOR_VERSION <= 5 )
-#error VUFUSE NEEDS FUSE >= 2.6
-#endif
+/** Enable hard remove */
+#define FUSE_HARDREMOVE  (1 << 0)
 
 struct fuse {
-	char *filesystemtype;
-	char *path;
-	char **exceptions;
-	short pathlen;
 	void *dlhandle;
-	pthread_t thread;
-	pthread_cond_t startloop;
-	pthread_cond_t endloop;
-	pthread_mutex_t endmutex;
 	struct fuse_operations fops;
-	int inuse;
-	unsigned long flags;
+
+	pthread_mutex_t mutex;
+
+  pthread_t thread;
+  pthread_cond_t startloop;
+  pthread_cond_t endloop;
+
+  int inuse;
+  unsigned long mountflags;
+  unsigned long fuseflags;
+	void *private_data;
 };
 
 struct fileinfo {
-	struct fuse_context *context;
 	//char *path;
-	long long pos;				/* file offset */
-	long long size;				/* file offset */
-	struct fuse_file_info ffi;		/* includes open flags, file handle and page_write mode  */
-	struct fuse_node *node;
-	struct vudirent *dirinfo;		/* conversion fuse-getdir into kernel compliant dirent. Dir head pointer (list of vudirent) */
-	struct vudirent *dirpos;		/* same conversion above: current pos entry (position in the list)*/
+  struct fuse_node *node;
+  off_t pos;        /* file offset */
+  struct fuse_file_info ffi;    /* includes open flags, file handle and page_write mode  */
+	FILE *dirf;
 };
 
-#define FILEPATH(f) ((f)->node->path)
-
-
-#define ERRNO_N_RETURN(err,ret) \
-{ \
-	errno = err; \
-	return ret; \
-}
+struct fuse_context *fuse_push_context(struct fuse_context *new);
+void fuse_pop_context(struct fuse_context *old);
 
 #endif

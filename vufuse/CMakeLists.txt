@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 
-set(CMAKE_C_FLAGS "-D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=29 -Wpointer-to-int-cast")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=29")
+
+include_directories(${VU_HEADERS} ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${VU_HEADERS} ${CMAKE_CURRENT_SOURCE_DIR} )
 
@@ -14,7 +16,7 @@ get_filename_component(VU_MOD_TARGET ${VU_MOD_FILE} NAME)
 
 add_library(${VU_MOD_TARGET} SHARED ${VUFUSEREAL_SOURCES})
 set_target_properties(${VU_MOD_TARGET} PROPERTIES PREFIX "")
+target_link_libraries(${VU_MOD_TARGET} stropt volatilestream execs)
 
 
 install(TARGETS ${VU_MOD_TARGET} LIBRARY DESTINATION ${MODULES_INSTALL_PATH})
-

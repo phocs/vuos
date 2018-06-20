@@ -1,32 +1,30 @@
-/*   This is part of um-ViewOS
- *   The user-mode implementation of OSVIEW -- A Process with a View
+/*
+ *   VUOS: view OS project
+ *   Copyright (C) 2018  Renzo Davoli <renzo@cs.unibo.it>
+ *                       Leonardo Frioli <leonardo.frioli@studio.unibo.it>
+ *   VirtualSquare team.
+ *   (inherited from umfuse Copyright 2005 Renzo Davoli)
  *
- *   
- *
- *   Copyright 2005 Renzo Davoli University of Bologna - Italy
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License, version 2, as
- *   published by the Free Software Foundation.
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 2 of the License, or
+ *   (at your option) any later version.
  *
  *   This program is distributed in the hope that it will be useful,
  *   but WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *   GNU General Public License for more details.
  *
- *   You should have received a copy of the GNU General Public License along
- *   with this program; if not, write to the Free Software Foundation, Inc.,
- *   51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA.
- *
- *   $Id: umfusestd.c 913 2011-01-06 17:46:23Z rd235 $
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#include <fuse/fuse.h>
+
+#include <fuse.h>
 #include <errno.h>
 #include <stdio.h>
 #include <libgen.h>
 #include <vumodule.h>
-
 
 /* Check fuse.h for the documentation*/
 
@@ -41,7 +39,6 @@ static int vustd_readlink (const char *path, char *link, size_t size)
 	printkdebug(F,"DEFAULT readlink %s\n", path);
 	return -EINVAL;
 }
-
 
 static int vustd_getdir (const char *path, fuse_dirh_t dir, fuse_dirfil_t dirf)
 {
@@ -200,14 +197,6 @@ static int vustd_opendir (const char *path, struct fuse_file_info *fileinfo)
 	return 0;
 }
 
-static int vustd_readdir (const char *path, void *buf, fuse_fill_dir_t filler, 
-		off_t offset, struct fuse_file_info *fileinfo)
-{
-	printkdebug(F,"DEFAULT readdir %s\n", path);
-	return -ENOSYS;
-}
-
-
 static int vustd_releasedir (const char *path, struct fuse_file_info *fileinfo)
 {
 	printkdebug(F,"DEFAULT removexattr %s\n", path);
@@ -245,8 +234,7 @@ static int vustd_fgetattr (const char *path, struct stat *buf, struct fuse_file_
 	return -ENOSYS;
 }
 
-
-struct fuse_operations defaultservice={
+struct fuse_operations vufuse_default_ops = {
 	.getattr = vustd_getattr,
 	.readlink = vustd_readlink,
 	.getdir = vustd_getdir,
@@ -273,7 +261,6 @@ struct fuse_operations defaultservice={
 	.listxattr = vustd_listxattr,
 	.removexattr = vustd_removexattr,
 	.opendir = vustd_opendir,
-	.readdir = vustd_readdir,
 	.releasedir = vustd_releasedir,
 	.fsyncdir = vustd_fsyncdir,
 	
@@ -284,5 +271,4 @@ struct fuse_operations defaultservice={
 	.create = vustd_create,
 	.ftruncate = vustd_ftruncate,
 	.fgetattr = vustd_fgetattr,
-
 };

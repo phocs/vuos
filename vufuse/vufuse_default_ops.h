@@ -2,6 +2,7 @@
  *   VUOS: view OS project
  *   Copyright (C) 2018  Renzo Davoli <renzo@cs.unibo.it>
  *   VirtualSquare team.
+ *   (inherited from umfuse Copyright 2005 Renzo Davoli)
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -18,22 +19,11 @@
  *
  */
 
-#include <vumodule.h>
+#ifndef VUFUSE_DEFAULT_OPS_H
+#define VUFUSE_DEFAULT_OPS_H
 
-VU_PROTOTYPES(unreal)
+#include <fuse.h>
 
-  struct vu_module_t vu_module = {
-    .name = "vubinfmt",
-    .description = "vu binfmt_misc support"
-  };
+extern struct fuse_operations vufuse_default_ops;
 
-__attribute__((constructor))
-  static void init(void) {
-    debug_set_name(B, "VUBINFMT");
-  }
-
-__attribute__((destructor))
-  static void fini(void) {
-    debug_set_name(B, "");
-  }
-
+#endif

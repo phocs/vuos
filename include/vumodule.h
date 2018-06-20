@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <libgen.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <sys/epoll.h>
@@ -21,6 +22,7 @@ struct vu_module_t {
 
 typedef long (*syscall_t)();
 extern uint16_t vu_arch_table[];
+extern char *mountflag_strings[32];
 
 syscall_t *vu_syscall_handler_pointer(struct vu_service_t *service, char *name);
 #define vu_syscall_handler(s, n) (*(vu_syscall_handler_pointer(s, #n)))
@@ -44,7 +46,7 @@ int VU_SYSNAME(name, close) (int fd, void *fdprivate); \
 ssize_t VU_SYSNAME(name, read) (int fd, void *buf, size_t count, void *fdprivate); \
 ssize_t VU_SYSNAME(name, write)(int fd, const void *buf, size_t count, void *fdprivate); \
 ssize_t VU_SYSNAME(name, pread64) (int fd, void *buf, size_t count, off_t offset, int flags, void *fdprivate); \
-ssize_t VU_SYSNAME(name, pwrite64) (int fd, const void *buf, size_t count, off_t offset, int flags, void *fdprivate); \
+ssize_t VU_SYSNAME(name, pwrite64)(int fd, const void *buf, size_t count, off_t offset, int flags, void *fdprivate); \
 int VU_SYSNAME(name, getdents64) (unsigned int fd, struct dirent64 *dirp, unsigned int count, void *fdprivate); \
 off_t VU_SYSNAME(name, lseek) (int fd, off_t offset, int whence, void *fdprivate); \
 int VU_SYSNAME(name, ioctl) (int fd, unsigned long request, void *buf, uintptr_t addr, void *fdprivate); \
@@ -125,6 +127,10 @@ struct vuht_entry_t *vuht_pathadd(uint8_t type, const char *source,
 		confirmfun_t confirmfun, void *ht_private_data);
 
 struct vuht_entry_t *vu_mod_getht(void);
+/* mainly for modules' threads */
+struct vuht_entry_t *vu_mod_setht(struct vuht_entry_t *ht);
+unsigned int vu_mod_gettid();
+mode_t vu_mod_getumask(void);
 struct vu_service_t *vuht_get_service(struct vuht_entry_t *hte);
 __attribute__((always_inline))
 	static inline syscall_t vu_mod_getservice(void) {
